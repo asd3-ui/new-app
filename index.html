@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" id="htmlRoot">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dungeon Raycast 3D</title>
+    <!-- ربط الأيقونة الخاصة بالتطبيق -->
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- القائمة الرئيسية -->
+        <div id="main-menu" class="screen">
+            <h1 id="menu-title">دنجن رايكاست ثلاثي الأبعاد</h1>
+            <p id="menu-desc" class="desc">استكشف المتاهات المتنوعة، اجمع المفاتيح، وتهرب من الوحوش في مغامرة ملحمية!</p>
+            <button id="start-btn" class="btn">ابدأ المغامرة</button>
+            <button id="lang-btn" class="btn lang-toggle">English 🌐</button>
+        </div>
+
+        <!-- شاشة اللعب والـ HUD -->
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud" class="hidden">
+            <div class="hud-item"><span id="healthLabel">الصحة</span>: <span id="healthText">100</span></div>
+            <div class="hud-item"><span id="levelLabel">المستوى</span>: <span id="levelText">1</span></div>
+            <div class="hud-item"><span id="keysLabel">المفاتيح</span>: <span id="keysText">0</span></div>
+            <div class="hud-item env-badge" id="envText">زنزانة حجرية</div>
+        </div>
+
+        <!-- أدوات التحكم باللمس للهواتف -->
+        <div id="touch-controls" class="hidden">
+            <div id="joystick-base">
+                <div id="joystick-handle"></div>
+            </div>
+            <div id="turn-joystick-base">
+                <div id="turn-joystick-handle"></div>
+            </div>
+        </div>
+
+        <!-- نافذة النهاية أو الخسارة -->
+        <div id="modal-screen" class="screen hidden">
+            <h2 id="modal-title">انتهت اللعبة</h2>
+            <p id="modal-text">لقد قضت عليك وحوش الدنجن!</p>
+            <button id="restart-btn" class="btn">إعادة المحاولة</button>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
