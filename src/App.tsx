@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { generateDungeon, DungeonMaze, GRID_WIDTH, GRID_HEIGHT } from './utils/mazeGenerator';
+import { generateDungeon, DungeonMaze, getDynamicLevelConfig, DynamicLevelConfig } from './utils/mazeGenerator';
 import { PlayerTopDown, EnemyTopDown } from './utils/entities';
-import { LEVELS, LevelConfig } from './utils/levels';
 import { App as CapacitorApp } from '@capacitor/app';
 
 const TILE_SIZE = 56;
@@ -56,7 +55,7 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'VICTORY'>('MENU');
   const [lang, setLang] = useState<'AR' | 'EN'>('AR');
-  const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+  const [currentLevelId, setCurrentLevelId] = useState(1);
   
   const [health, setHealth] = useState(100);
   const [stamina, setStamina] = useState(100);
@@ -64,7 +63,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
 
-  const currentLevel: LevelConfig = LEVELS[currentLevelIdx] || LEVELS[0];
+  const currentLevel: DynamicLevelConfig = getDynamicLevelConfig(currentLevelId);
 
   const gameRef = useRef<{
     dungeon: DungeonMaze;
@@ -75,7 +74,7 @@ export default function App() {
     dashCooldown: number;
     gameTime: number;
   }>({
-    dungeon: generateDungeon(),
+    dungeon: generateDungeon(21, 21, 3),
     player: new PlayerTopDown(1.5, 1.5),
     enemy: new EnemyTopDown(18.5, 18.5),
     joystick: { x: 0, y: 0, active: false },
@@ -84,30 +83,25 @@ export default function App() {
     gameTime: 0,
   });
 
-  const startLevel = (lvlIdx: number) => {
+  const startLevel = (lvlId: number) => {
     audio.init();
     try {
-      setCurrentLevelIdx(lvlIdx);
-      const lvl = LEVELS[lvlIdx];
-      const dungeon = generateDungeon();
-      
-      // التكييف مع عدد مفاتيح المرحلة
-      const candidates = [...dungeon.key_positions];
-      if (candidates.length < lvl.keysCount) {
-        // مفاتيح كافية
-      }
-      dungeon.key_positions = dungeon.key_positions.slice(0, lvl.keysCount);
+      setCurrentLevelId(lvlId);
+      const lvlConfig = getDynamicLevelConfig(lvlId);
+      const dungeon = generateDungeon(lvlConfig.gridWidth, lvlConfig.gridHeight, lvlConfig.keysCount);
 
       gameRef.current.dungeon = dungeon;
       gameRef.current.player = new PlayerTopDown(...dungeon.player_spawn);
       gameRef.current.player.total_keys = dungeon.key_positions.length;
       
-      const enemy = new EnemyTopDown(...dungeon.enemy_spawn);
-      enemy.speed = lvl.enemySpeed;
+      const enemy = new EnemyTopDown(...dungeon.enemy_spawn, lvlConfig.enemySpeed);
       gameRef.current.enemy = enemy;
 
       gameRef.current.particles = [];
       gameRef.current.gameTime = 0;
+      setHealth(100);
+      setStamina(100);
+      setKeys(`0/${dungeon.key_positions.length}`);
       setGameState('PLAYING');
       triggerVibration(50);
     } catch (e) {
@@ -137,9 +131,10 @@ export default function App() {
     }
   };
 
-  // التحكم أوزرار الرجوع
   useEffect(() => {
     let isMounted = true;
+    let listenerHandle: any = null;
+
     CapacitorApp.addListener('backButton', () => {
       if (!isMounted) return;
       if (gameState === 'PLAYING') {
@@ -153,9 +148,14 @@ export default function App() {
           CapacitorApp.exitApp();
         }
       }
-    }).catch(() => {});
+    }).then(handle => { listenerHandle = handle; }).catch(() => {});
 
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      if (listenerHandle && typeof listenerHandle.remove === 'function') {
+        listenerHandle.remove();
+      }
+    };
   }, [gameState, lang]);
 
   useEffect(() => {
@@ -171,6 +171,7 @@ export default function App() {
 
     let animId: number;
     let lastTime = performance.now();
+    let frameCount = 0;
 
     canvas.width = window.innerWidth || 800;
     canvas.height = window.innerHeight || 600;
@@ -243,6 +244,7 @@ export default function App() {
       try {
         const dt = Math.min((now - lastTime) / 1000, 0.05);
         lastTime = now;
+        frameCount++;
 
         const g = gameRef.current;
         const theme = currentLevel.theme;
@@ -311,10 +313,12 @@ export default function App() {
             }
           }
 
-          setHealth(Math.max(0, Math.floor(g.player.health)));
-          setStamina(Math.floor(g.player.stamina));
-          setKeys(`${g.player.keys_collected}/${g.player.total_keys}`);
-          setScore(g.player.score);
+          if (frameCount % 10 === 0) {
+            setHealth(Math.max(0, Math.floor(g.player.health)));
+            setStamina(Math.floor(g.player.stamina));
+            setKeys(`${g.player.keys_collected}/${g.player.total_keys}`);
+            setScore(g.player.score);
+          }
         }
 
         ctx.fillStyle = theme.bg;
@@ -326,8 +330,8 @@ export default function App() {
           const oy = canvas.height / 2 - g.player.y * TILE_SIZE;
           ctx.translate(ox, oy);
 
-          for (let r = 0; r < GRID_HEIGHT; r++) {
-            for (let c = 0; c < GRID_WIDTH; c++) {
+          for (let r = 0; r < g.dungeon.height; r++) {
+            for (let c = 0; c < g.dungeon.width; c++) {
               const val = g.dungeon.grid[r][c];
               const rx = c * TILE_SIZE;
               const ry = r * TILE_SIZE;
@@ -377,9 +381,10 @@ export default function App() {
 
           ctx.restore();
 
-          const grad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 40, canvas.width / 2, canvas.height / 2, 300);
+          const maxDim = Math.max(canvas.width, canvas.height);
+          const grad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 60, canvas.width / 2, canvas.height / 2, maxDim * 0.65);
           grad.addColorStop(0, "rgba(5, 7, 12, 0)");
-          grad.addColorStop(1, "rgba(5, 7, 12, 0.95)");
+          grad.addColorStop(1, "rgba(5, 7, 12, 0.94)");
           ctx.fillStyle = grad;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -417,17 +422,17 @@ export default function App() {
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('resize', handleResize);
     };
-  }, [gameState, highScore, currentLevelIdx]);
+  }, [gameState, highScore, currentLevelId]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#080a0f] select-none dir-auto">
       <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
 
-      {/* زر تحويل اللغة في أعلى الشاشة */}
+      {/* زر تحويل اللغة */}
       <div className="absolute top-4 left-4 z-30">
         <button
           onClick={() => setLang(lang === 'AR' ? 'EN' : 'AR')}
-          className="px-3 py-1.5 bg-cyan-950/80 border border-cyan-500/50 rounded-lg text-cyan-300 font-bold text-xs backdrop-blur"
+          className="px-3 py-1.5 bg-cyan-950/80 border border-cyan-500/50 rounded-lg text-cyan-300 font-bold text-xs backdrop-blur shadow-lg active:scale-95 transition"
         >
           {lang === 'AR' ? 'English 🌐' : 'العربية 🌐'}
         </button>
@@ -447,30 +452,30 @@ export default function App() {
       {gameState === 'PLAYING' && (
         <button
           onClick={triggerDash}
-          className="absolute bottom-8 right-8 w-20 h-20 bg-red-500/30 border-2 border-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg active:scale-95 transition"
+          className="absolute bottom-8 right-8 w-20 h-20 bg-red-500/30 border-2 border-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg active:scale-95 transition z-30"
         >
           DASH
         </button>
       )}
 
-      {/* 1. القائمة الرئيسية (Main Menu) */}
+      {/* 1. القائمة الرئيسية */}
       {gameState === 'MENU' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#080a0f]/95 text-white p-6 z-20">
           <h1 className="text-3xl md:text-5xl font-extrabold text-cyan-400 mb-2 text-center tracking-wider">
             {lang === 'AR' ? 'مطاردة الدنجن' : 'DUNGEON CHASE'}
           </h1>
-          <p className="text-gray-400 mb-8 text-center max-w-md">
+          <p className="text-gray-400 mb-8 text-center max-w-md text-sm md:text-base">
             {lang === 'AR' 
-              ? 'تحدَّ المتاهات، اجمع المفاتيح المخبأة ونجُ من الوحش اللعين!' 
-              : 'Conquer dungeons, gather hidden keys, and outrun the beast!'}
+              ? 'متاهات متجددة بالذكاء الاصطناعي، اجمع المفاتيح المخبأة ونجُ من الوحش!' 
+              : 'Infinite AI procedurally generated mazes, collect keys and escape!'}
           </p>
           
           <div className="flex flex-col gap-4 w-64">
             <button
-              onClick={() => startLevel(0)}
+              onClick={() => startLevel(1)}
               className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-lg font-bold rounded-2xl shadow-lg transition active:scale-95"
             >
-              {lang === 'AR' ? 'بدء اللعب الفوري' : 'Quick Play'}
+              {lang === 'AR' ? 'بدء اللعب' : 'Start Game'}
             </button>
 
             <button
@@ -487,58 +492,59 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. قائمة اختيار المرحلة (Level Select) */}
+      {/* 2. اختيار المرحلة المتجددة */}
       {gameState === 'LEVEL_SELECT' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#080a0f]/95 text-white p-6 z-20">
           <h2 className="text-2xl font-bold text-cyan-400 mb-6">
-            {lang === 'AR' ? 'اختر المرحلة' : 'Select Level'}
+            {lang === 'AR' ? 'المراحل المتجددة' : 'Procedural Levels'}
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md mb-6">
-            {LEVELS.map((lvl, idx) => (
-              <button
-                key={lvl.id}
-                onClick={() => startLevel(idx)}
-                className="p-4 rounded-xl border border-cyan-500/30 bg-slate-900/80 hover:bg-cyan-900/30 text-left flex flex-col gap-1 transition"
-              >
-                <span className="font-bold text-cyan-300">{lang === 'AR' ? lvl.nameAr : lvl.nameEn}</span>
-                <span className="text-xs text-gray-400">🔑 {lang === 'AR' ? 'المفاتيح:' : 'Keys:'} {lvl.keysCount}</span>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-6 max-h-60 overflow-y-auto p-2">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((lvlNum) => {
+              const conf = getDynamicLevelConfig(lvlNum);
+              return (
+                <button
+                  key={lvlNum}
+                  onClick={() => startLevel(lvlNum)}
+                  className="p-3 rounded-xl border border-cyan-500/30 bg-slate-900/80 hover:bg-cyan-900/30 text-left flex flex-col gap-1 transition active:scale-95"
+                >
+                  <span className="font-bold text-cyan-300 text-xs">{lang === 'AR' ? `مرحلة ${lvlNum}` : `Level ${lvlNum}`}</span>
+                  <span className="text-[10px] text-gray-400">🔑 {conf.keysCount} {lang === 'AR' ? 'مفاتيح' : 'Keys'}</span>
+                </button>
+              );
+            })}
           </div>
 
           <button
             onClick={() => setGameState('MENU')}
-            className="px-6 py-2 bg-gray-800 text-gray-300 rounded-xl text-sm font-bold"
+            className="px-6 py-2.5 bg-gray-800 text-gray-300 rounded-xl text-sm font-bold active:scale-95 transition"
           >
             {lang === 'AR' ? 'رجوع' : 'Back'}
           </button>
         </div>
       )}
 
-      {/* 3. الشاشة عند الفوز الفردي باللعبة والمرحلة التالية */}
+      {/* 3. شاشة الفوز والمرحلة التالية */}
       {gameState === 'VICTORY' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-6 z-20">
           <h2 className="text-3xl font-black mb-4 text-emerald-400">
-            {lang === 'AR' ? 'مبروك! نجوت من المرحلة' : 'Stage Cleared!'}
+            {lang === 'AR' ? 'مبروك! اجتزت المتاهة' : 'Maze Cleared!'}
           </h2>
           <p className="text-lg text-gray-300 mb-6">
             {lang === 'AR' ? 'النقاط:' : 'Score:'} {score}
           </p>
 
           <div className="flex gap-4">
-            {currentLevelIdx + 1 < LEVELS.length ? (
-              <button
-                onClick={() => startLevel(currentLevelIdx + 1)}
-                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl shadow-lg transition"
-              >
-                {lang === 'AR' ? 'المرحلة التالية ➔' : 'Next Level ➔'}
-              </button>
-            ) : null}
+            <button
+              onClick={() => startLevel(currentLevelId + 1)}
+              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl shadow-lg transition active:scale-95"
+            >
+              {lang === 'AR' ? 'المرحلة التالية ➔' : 'Next Level ➔'}
+            </button>
 
             <button
               onClick={() => setGameState('MENU')}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl shadow-lg transition"
+              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl shadow-lg transition active:scale-95"
             >
               {lang === 'AR' ? 'القائمة الرئيسية' : 'Main Menu'}
             </button>
@@ -546,7 +552,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. الخسارة إعادة المحاولة */}
+      {/* 4. شاشة الخسارة */}
       {gameState === 'GAMEOVER' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-6 z-20">
           <h2 className="text-4xl font-black mb-4 text-red-500">
@@ -558,15 +564,15 @@ export default function App() {
           
           <div className="flex gap-4">
             <button
-              onClick={() => startLevel(currentLevelIdx)}
-              className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl shadow-lg transition"
+              onClick={() => startLevel(currentLevelId)}
+              className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl shadow-lg transition active:scale-95"
             >
-              {lang === 'AR' ? 'إعادة المحاولة' : 'Retry'}
+              {lang === 'AR' ? 'إعادة المحاولة (متاهة جديدة)' : 'Retry (New Maze)'}
             </button>
             
             <button
               onClick={() => setGameState('MENU')}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition"
+              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition active:scale-95"
             >
               {lang === 'AR' ? 'القائمة الرئيسية' : 'Main Menu'}
             </button>
