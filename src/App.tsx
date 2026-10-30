@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10349)
+Total output lines: 945
+
 import React, { useEffect, useRef, useState } from 'react';
 import { generateDungeon, DungeonMaze, getDynamicLevelConfig, DynamicLevelConfig, GRID_WIDTH, GRID_HEIGHT } from './utils/mazeGenerator';
 import { PlayerTopDown, EnemyTopDown } from './utils/entities';
@@ -41,6 +44,12 @@ class SoundSynthesizer {
       osc.start();
       osc.stop(this.ctx.currentTime + duration);
     } catch {}
+  }
+
+  playVictory() {
+    [523, 659, 784, 1047].forEach((freq, index) => {
+      window.setTimeout(() => this.playBeep(freq, 0.22), index * 120);
+    });
   }
 }
 
@@ -89,7 +98,7 @@ function findGridPath(grid: number[][], start: [number, number], target: [number
   return route.reverse();
 }
 
-function drawHero(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number) {
+function drawHero(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, phase: number, moving: number, skin: number) {
   ctx.save();
   ctx.translate(x, y);
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -102,20 +111,26 @@ function drawHero(ctx: CanvasRenderingContext2D, x: number, y: number, angle: nu
   ctx.beginPath();
   ctx.ellipse(0, 8, 13, 12, 0, 0, Math.PI * 2);
   ctx.fill();
+  const stride = moving > 0.08 ? Math.sin(phase) * 5 : 0;
   ctx.fillStyle = '#5c4634';
   ctx.beginPath();
-  ctx.ellipse(-8, 14, 4, 7, -0.2, 0, Math.PI * 2);
-  ctx.ellipse(8, 14, 4, 7, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(-8, 14 + stride, 4, 7, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(8, 14 - stride, 4, 7, 0.2, 0, Math.PI * 2);
   ctx.fill();
 
   const armor = ctx.createLinearGradient(-13, -8, 13, 8);
-  armor.addColorStop(0, '#b7a17a');
-  armor.addColorStop(0.45, '#66745d');
-  armor.addColorStop(1, '#313d36');
+  const kits = [['#b7a17a', '#66745d', '#313d36'], ['#93c5fd', '#2563eb', '#172554'], ['#fda4af', '#be123c', '#4c0519']];
+  armor.addColorStop(0, kits[skin][0]);
+  armor.addColorStop(0.45, kits[skin][1]);
+  armor.addColorStop(1, kits[skin][2]);
   ctx.fillStyle = armor;
   ctx.beginPath();
   ctx.ellipse(0, 1, 13, 15, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#384139';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-10, -3); ctx.lineTo(-15, 5 + stride); ctx.moveTo(10, -3); ctx.lineTo(15, 5 - stride); ctx.stroke();
   ctx.strokeStyle = 'rgba(225,213,176,0.65)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -190,7 +205,7 @@ function drawMiniMap(
 ) {
   const x = 16;
   const y = 72;
-  const size = 154;
+  const size = 122;
   const inset = 8;
   const cell = (size - inset * 2) / Math.max(dungeon.width, dungeon.height);
   const mapX = x + (size - cell * dungeon.width) / 2;
@@ -250,7 +265,7 @@ function drawMiniMap(
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const joystickHandleRef = useRef<HTMLDivElement | null>(null);
-  const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'VICTORY'>('MENU');
+  const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'SHOP' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'VICTORY'>('MENU');
   const [lang, setLang] = useState<'AR' | 'EN'>('AR');
   const [currentLevelId, setCurrentLevelId] = useState(1);
   
@@ -259,6 +274,10 @@ export default function App() {
   const [keys, setKeys] = useState('0/3');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [coins, setCoins] = useState(() => Number(localStorage.getItem('dungeon_coins') || 0));
+  const [unlockedLevel, setUnlockedLevel] = useState(() => Number(localStorage.getItem('dungeon_unlocked') || 1));
+  const [ownedHeroes, setOwnedHeroes] = useState<number[]>(() => JSON.parse(localStorage.getItem('dungeon_heroes') || '[0]'));
+  const [heroSkin, setHeroSkin] = useState(() => Number(localStorage.getItem('dungeon_hero_selected') || 0));
 
   const currentLevel: DynamicLevelConfig = getDynamicLevelConfig(currentLevelId);
 
@@ -272,6 +291,7 @@ export default function App() {
     gameTime: number;
     route: [number, number][];
     routeTimer: number;
+    moving: number;
   }>({
     dungeon: generateDungeon(GRID_WIDTH, GRID_HEIGHT, 3),
     player: new PlayerTopDown(1.5, 1.5),
@@ -282,6 +302,7 @@ export default function App() {
     gameTime: 0,
     route: [],
     routeTimer: 0,
+    moving: 0,
   });
 
   const startLevel = (lvlId: number) => {
@@ -302,6 +323,7 @@ export default function App() {
       gameRef.current.gameTime = 0;
       gameRef.current.route = [];
       gameRef.current.routeTimer = 0;
+      gameRef.current.moving = 0;
       setHealth(100);
       setStamina(100);
       setKeys(`0/${dungeon.key_positions.length}`);
@@ -343,7 +365,9 @@ export default function App() {
       if (gameState === 'PLAYING') {
         setGameState('PAUSED');
         triggerVibration(30);
-      } else if (gameState === 'PAUSED' || gameState === 'LEVEL_SELECT' || gameState === 'GAMEOVER' || gameState === 'VICTORY') {
+      } else if (gameState === 'PAUSED') {
+        setGameState('PLAYING');
+      } else if (gameState === 'SHOP' || gameState === 'LEVEL_SELECT' || gameState === 'GAMEOVER' || gameState === 'VICTORY') {
         setGameState('MENU');
         triggerVibration(30);
       } else if (gameState === 'MENU') {
@@ -476,6 +500,7 @@ export default function App() {
           if (keysDown['d'] || keysDown['ArrowRight']) vx = 1;
 
           g.player.update_motion(vx, vy, dt, g.dungeon.grid);
+          g.moving = Math.hypot(vx, vy);
 
           g.particles = g.particles.filter(p => {
             p.x += p.vx * dt;
@@ -489,6 +514,11 @@ export default function App() {
               g.dungeon.key_positions.splice(idx, 1);
               g.player.keys_collected++;
               g.player.score += 500;
+              setCoins(previous => {
+                const total = previous + 10;
+                localStorage.setItem('dungeon_coins', String(total));
+                return total;
+              });
               audio.playBeep(880, 0.18);
               triggerVibration(70);
               for (let i = 0; i < 15; i++) {
@@ -515,28 +545,7 @@ export default function App() {
           }
 
           if (g.player.keys_collected >= g.player.total_keys) {
-            const [ex, ey] = g.dungeon.exit_pos;
-            if (Math.hypot(g.player.x - ex, g.player.y - ey) < 0.85) {
-              g.player.score += 2000 + Math.max(0, Math.floor(300 - g.gameTime) * 10);
-              if (g.player.score > highScore) {
-                setHighScore(g.player.score);
-                try { localStorage.setItem('dungeon_high_score', g.player.score.toString()); } catch {}
-              }
-              triggerVibration([100, 50, 100]);
-              setGameState('VICTORY');
-            }
-          }
-
-          const caught = g.enemy.update(g.player.x, g.player.y, g.dungeon.grid, dt);
-          if (caught) {
-            g.player.health -= 60 * dt;
-            triggerVibration(30);
-            if (g.player.health <= 0) {
-              audio.playBeep(180, 0.35);
-              triggerVibration([200, 100, 200]);
-              setGameState('GAMEOVER');
-            }
-          }
+            const [ex, ey] = g.dungeon.ex…349 tokens truncated…         }
 
           if (frameCount % 10 === 0) {
             setHealth(Math.max(0, Math.floor(g.player.health)));
@@ -633,7 +642,7 @@ export default function App() {
             drawMonster(ctx, g.enemy.x * TILE_SIZE, g.enemy.y * TILE_SIZE, g.enemy.angle, (Math.sin(g.gameTime * 5) + 1) / 2);
           }
 
-          drawHero(ctx, g.player.x * TILE_SIZE, g.player.y * TILE_SIZE, g.player.angle);
+          drawHero(ctx, g.player.x * TILE_SIZE, g.player.y * TILE_SIZE, g.player.angle, g.gameTime * 13, g.moving, heroSkin);
 
           ctx.restore();
 
@@ -712,7 +721,7 @@ export default function App() {
 
       {/* HUD Header */}
       {gameState === 'PLAYING' && (
-        <div className="absolute top-4 right-4 flex flex-col gap-2 bg-[#0a0c12]/90 border border-cyan-500/30 p-3 rounded-xl backdrop-blur text-white text-sm font-bold shadow-xl pointer-events-none">
+        <div className="absolute top-3 right-3 flex flex-col gap-1 bg-[#0a0c12]/90 border border-cyan-500/30 px-2 py-1.5 rounded-lg backdrop-blur text-white text-[11px] font-bold shadow-xl pointer-events-none">
           <div className="mb-1 border-b border-white/10 pb-1 text-cyan-200">{lang === 'AR' ? currentLevel.nameAr : currentLevel.nameEn}</div>
           <div className="text-[11px] text-slate-400">{lang === 'AR' ? 'متاهة' : 'Maze'} {currentLevel.gridWidth} × {currentLevel.gridHeight}</div>
           <div>❤️ {lang === 'AR' ? 'الصحة' : 'Health'}: <span className="text-red-400">{health}</span></div>
@@ -733,11 +742,13 @@ export default function App() {
       )}
 
       {gameState === 'PAUSED' && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80 text-white">
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/85 text-white">
           <h2 className="mb-5 text-3xl font-extrabold text-cyan-300">{lang === 'AR' ? 'اللعبة متوقفة' : 'Game Paused'}</h2>
-          <button onClick={() => setGameState('PLAYING')} className="rounded-xl bg-cyan-500 px-8 py-3 font-bold text-slate-950 active:scale-95">
+          <button onClick={() => setGameState('PLAYING')} className="w-56 rounded-xl bg-cyan-500 px-8 py-3 font-bold text-slate-950 active:scale-95">
             {lang === 'AR' ? 'متابعة اللعب' : 'Resume'}
           </button>
+          <button onClick={() => startLevel(currentLevelId)} className="w-56 rounded-xl bg-amber-500 px-8 py-3 font-bold text-slate-950 active:scale-95">{lang === 'AR' ? 'إعادة المرحلة' : 'Restart'}</button>
+          <button onClick={() => setGameState('MENU')} className="w-56 rounded-xl bg-slate-700 px-8 py-3 font-bold active:scale-95">{lang === 'AR' ? 'القائمة الرئيسية' : 'Main Menu'}</button>
         </div>
       )}
 
@@ -767,6 +778,7 @@ export default function App() {
             >
               {lang === 'AR' ? 'اختيار المرحلة 🗺️' : 'Select Level 🗺️'}
             </button>
+            <button onClick={() => setGameState('SHOP')} className="w-full rounded-xl border border-amber-400/40 bg-amber-950/60 py-3 font-bold text-amber-300">{lang === 'AR' ? `متجر الأبطال · 🪙 ${coins}` : `Hero shop · 🪙 ${coins}`}</button>
           </div>
 
           <div className="text-yellow-400 font-bold text-sm mt-8">
@@ -776,6 +788,38 @@ export default function App() {
       )}
 
       {/* 2. اختيار المرحلة */}
+      {gameState === 'SHOP' && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#080a0f]/96 p-5 text-white">
+          <h2 className="mb-2 text-2xl font-black text-amber-300">{lang === 'AR' ? 'معرض المستكشفين' : 'Explorer Hall'}</h2>
+          <p className="mb-5 text-sm text-slate-400">{lang === 'AR' ? `رصيدك: ${coins} قطعة · اجمع القطع من المفاتيح والفوز` : `Balance: ${coins} coins · Earn coins from keys and victories`}</p>
+          <div className="grid w-full max-w-md grid-cols-1 gap-3">
+            {[
+              { id: 0, name: lang === 'AR' ? 'الحارس' : 'The Warden', cost: 0, color: 'bg-[#66745d]' },
+              { id: 1, name: lang === 'AR' ? 'كشاف الجليد' : 'Frost Scout', cost: 250, color: 'bg-blue-600' },
+              { id: 2, name: lang === 'AR' ? 'صياد الظلال' : 'Shadow Hunter', cost: 600, color: 'bg-rose-700' },
+            ].map(hero => {
+              const owned = ownedHeroes.includes(hero.id);
+              return <button key={hero.id} onClick={() => {
+                if (owned) { setHeroSkin(hero.id); localStorage.setItem('dungeon_hero_selected', String(hero.id)); }
+                else if (coins >= hero.cost) {
+                  const nextCoins = coins - hero.cost;
+                  const nextOwned = [...ownedHeroes, hero.id];
+                  setCoins(nextCoins); setOwnedHeroes(nextOwned); setHeroSkin(hero.id);
+                  localStorage.setItem('dungeon_coins', String(nextCoins));
+                  localStorage.setItem('dungeon_heroes', JSON.stringify(nextOwned));
+                  localStorage.setItem('dungeon_hero_selected', String(hero.id));
+                }
+              }} className="flex items-center gap-4 rounded-xl border border-white/10 bg-slate-900 p-4 text-left active:scale-95">
+                <span className={`h-12 w-12 rounded-full border-2 border-white/30 ${hero.color}`} />
+                <span className="flex-1"><b className="block">{hero.name}</b><small className="text-slate-400">{owned ? (heroSkin === hero.id ? (lang === 'AR' ? 'مختار حالياً' : 'Selected') : (lang === 'AR' ? 'اضغط للاختيار' : 'Tap to select')) : `🪙 ${hero.cost}`}</small></span>
+                <span>{owned ? '✓' : coins >= hero.cost ? '🔓' : '🔒'}</span>
+              </button>;
+            })}
+          </div>
+          <button onClick={() => setGameState('MENU')} className="mt-5 rounded-xl bg-slate-700 px-8 py-2.5 font-bold">{lang === 'AR' ? 'عودة' : 'Back'}</button>
+        </div>
+      )}
+
       {gameState === 'LEVEL_SELECT' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#080a0f]/95 text-white p-6 z-20">
             <h2 className="text-2xl font-bold text-cyan-400 mb-2">
@@ -789,10 +833,11 @@ export default function App() {
               return (
                 <button
                   key={lvlNum}
+                  disabled={lvlNum > unlockedLevel}
                   onClick={() => startLevel(lvlNum)}
-                  className="p-3 rounded-xl border border-cyan-500/30 bg-slate-900/80 hover:bg-cyan-900/30 text-left flex flex-col gap-1 transition active:scale-95"
+                  className={`p-3 rounded-xl border border-cyan-500/30 text-left flex flex-col gap-1 transition ${lvlNum > unlockedLevel ? 'bg-slate-950/80 opacity-45' : 'bg-slate-900/80 hover:bg-cyan-900/30 active:scale-95'}`}
                 >
-                  <span className="font-bold text-cyan-300 text-xs">{lang === 'AR' ? `مرحلة ${lvlNum}` : `Level ${lvlNum}`}</span>
+                  <span className="font-bold text-cyan-300 text-xs">{lang === 'AR' ? `مرحلة ${lvlNum}${lvlNum > unlockedLevel ? ' 🔒' : ' ✓'}` : `Level ${lvlNum}${lvlNum > unlockedLevel ? ' 🔒' : ' ✓'}`}</span>
                   <span className="text-[10px] text-gray-300">{lang === 'AR' ? conf.theme.nameAr : conf.theme.nameEn}</span>
                   <span className="text-[10px] text-gray-500">{conf.gridWidth}×{conf.gridHeight} · 🔑 {conf.keysCount}</span>
                 </button>
