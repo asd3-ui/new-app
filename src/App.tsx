@@ -53,6 +53,7 @@ const triggerVibration = (pattern: number | number[]) => {
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const joystickHandleRef = useRef<HTMLDivElement | null>(null);
   const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'VICTORY'>('MENU');
   const [lang, setLang] = useState<'AR' | 'EN'>('AR');
   const [currentLevelId, setCurrentLevelId] = useState(1);
@@ -187,11 +188,14 @@ export default function App() {
     window.addEventListener('keyup', handleKeyUp);
 
     let touchIdentifier: number | null = null;
+    const joystickOrigin = { x: 96, y: window.innerHeight - 96 };
     const handleTouchStart = (e: TouchEvent) => {
       if (gameState !== 'PLAYING') return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        if (t.clientX < window.innerWidth / 2 && touchIdentifier === null) {
+        const touchDistance = Math.hypot(t.clientX - joystickOrigin.x, t.clientY - joystickOrigin.y);
+        if (touchDistance <= 72 && touchIdentifier === null) {
+          e.preventDefault();
           touchIdentifier = t.identifier;
           updateJoystick(t.clientX, t.clientY);
         }
@@ -200,6 +204,7 @@ export default function App() {
 
     const handleTouchMove = (e: TouchEvent) => {
       if (touchIdentifier === null) return;
+      e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === touchIdentifier) {
@@ -210,23 +215,30 @@ export default function App() {
 
     const handleTouchEnd = (e: TouchEvent) => {
       if (touchIdentifier === null) return;
+      e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === touchIdentifier) {
           touchIdentifier = null;
           if (gameRef.current) gameRef.current.joystick = { x: 0, y: 0, active: false };
+          if (joystickHandleRef.current) joystickHandleRef.current.style.transform = 'translate(0px, 0px)';
         }
       }
     };
 
     const updateJoystick = (clientX: number, clientY: number) => {
-      const jx = 100;
-      const jy = window.innerHeight - 100;
+      const jx = joystickOrigin.x;
+      const jy = joystickOrigin.y;
       const dx = clientX - jx;
       const dy = clientY - jy;
       const dist = Math.hypot(dx, dy);
       const maxDist = 50;
       const angle = Math.atan2(dy, dx);
       const power = Math.min(dist, maxDist) / maxDist;
+      if (joystickHandleRef.current) {
+        const handleX = Math.cos(angle) * Math.min(dist, maxDist);
+        const handleY = Math.sin(angle) * Math.min(dist, maxDist);
+        joystickHandleRef.current.style.transform = `translate(${handleX}px, ${handleY}px)`;
+      }
       if (gameRef.current) {
         gameRef.current.joystick = {
           x: Math.cos(angle) * power,
@@ -236,9 +248,10 @@ export default function App() {
       }
     };
 
-    window.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
     const loop = (now: number) => {
       try {
@@ -391,7 +404,7 @@ export default function App() {
           if (g.joystick && g.joystick.active) {
             ctx.fillStyle = "rgba(255,255,255,0.1)";
             ctx.beginPath();
-            ctx.arc(100, canvas.height - 100, 50, 0, Math.PI * 2);
+            ctx.arc(96, canvas.height - 96, 50, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = "rgba(6, 182, 212, 0.6)";
             ctx.lineWidth = 2;
@@ -420,6 +433,7 @@ export default function App() {
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
       window.removeEventListener('resize', handleResize);
     };
   }, [gameState, highScore, currentLevelId]);
@@ -427,6 +441,12 @@ export default function App() {
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#080a0f] select-none dir-auto">
       <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
+
+      {gameState === 'PLAYING' && (
+        <div aria-hidden="true" className="pointer-events-none absolute bottom-8 left-8 z-20 flex h-32 w-32 items-center justify-center rounded-full border-2 border-white/25 bg-white/10">
+          <div ref={joystickHandleRef} className="h-14 w-14 rounded-full border border-white/30 bg-white/30 shadow-lg" />
+        </div>
+      )}
 
       {/* زر تحويل اللغة */}
       <div className="absolute top-4 left-4 z-30">
@@ -456,6 +476,15 @@ export default function App() {
         >
           DASH
         </button>
+      )}
+
+      {gameState === 'PAUSED' && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80 text-white">
+          <h2 className="mb-5 text-3xl font-extrabold text-cyan-300">{lang === 'AR' ? 'اللعبة متوقفة' : 'Game Paused'}</h2>
+          <button onClick={() => setGameState('PLAYING')} className="rounded-xl bg-cyan-500 px-8 py-3 font-bold text-slate-950 active:scale-95">
+            {lang === 'AR' ? 'متابعة اللعب' : 'Resume'}
+          </button>
+        </div>
       )}
 
       {/* 1. القائمة الرئيسية */}
@@ -582,3 +611,4 @@ export default function App() {
     </div>
   );
 }
+
