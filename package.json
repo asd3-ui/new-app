@@ -1,20 +1,20 @@
 {
-  "name": "dungeon-raycast-3d",
+  "name": "topdown-dungeon-chase",
   "version": "1.0.0",
-  "description": "3D Raycast Dungeon Game for Android",
+  "description": "Top-Down Dungeon Chase Game for Android",
   "main": "game.js",
   "scripts": {
-    "build": "mkdir -p www && cp index.html style.css game.js icon.png www/",
+    "build": "mkdir -p www && cp index.html style.css game.js www/",
+    "assets": "npx @capacitor/assets generate --android",
     "cap:add": "cap add android",
-    "cap:sync": "cap sync android",
-    "cap:open": "cap open android"
+    "cap:sync": "cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^5.7.0",
-    "@capacitor/app": "^5.0.0",
     "@capacitor/core": "^5.7.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^5.7.0"
+    "@capacitor/cli": "^5.7.0",
+    "@capacitor/assets": "^3.0.5"
   }
 }
