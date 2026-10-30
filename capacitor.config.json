@@ -1,12 +1,12 @@
 {
-  "appId": "com.dungeon.raycast3d",
-  "appName": "Dungeon Raycast 3D",
+  "appId": "com.dungeon.chase",
+  "appName": "Top-Down Dungeon Chase",
   "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
   "android": {
     "allowMixedContent": true,
-    "backgroundColor": "#05050a"
+    "backgroundColor": "#0b0b10"
   }
 }
