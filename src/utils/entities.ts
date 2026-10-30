@@ -122,7 +122,7 @@ export class EnemyTopDown {
       const ny = this.y + (tdy / tdist) * step;
       const gx = Math.floor(nx);
       const gy = Math.floor(ny);
-      if (gx >= 0 && gx < 20 && gy >= 0 && gy < 20 && maze_grid[gy][gx] === 0) {
+      if (gx >= 0 && gx < maze_grid[0].length && gy >= 0 && gy < maze_grid.length && maze_grid[gy][gx] === 0) {
         this.x = nx;
         this.y = ny;
       }
@@ -131,46 +131,40 @@ export class EnemyTopDown {
   }
 
   private _astar(start: [number, number], goal: [number, number], grid: number[][]): [number, number][] {
-    const h = grid.length;
-    const w = grid[0].length;
-    const openSet: { f: number; x: number; y: number }[] = [{ f: 0, x: start[0], y: start[1] }];
-    const cameFrom = new Map<string, [number, number]>();
-    const gScore = new Map<string, number>();
-    gScore.set(`${start[0]},${start[1]}`, 0);
+    const height = grid.length;
+    const width = grid[0].length;
+    const startId = start[1] * width + start[0];
+    const goalId = goal[1] * width + goal[0];
+    const parent = new Int32Array(width * height).fill(-1);
+    const queue = new Int32Array(width * height);
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = startId;
+    parent[startId] = startId;
 
-    while (openSet.length > 0) {
-      openSet.sort((a, b) => a.f - b.f);
-      const current = openSet.shift()!;
-      const cx = current.x;
-      const cy = current.y;
-
-      if (cx === goal[0] && cy === goal[1]) {
-        const path: [number, number][] = [[cx, cy]];
-        let currKey = `${cx},${cy}`;
-        while (cameFrom.has(currKey)) {
-          const prev = cameFrom.get(currKey)!;
-          path.push(prev);
-          currKey = `${prev[0]},${prev[1]}`;
-        }
-        path.reverse();
-        return path;
-      }
-
-      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-        const nx = cx + dx;
-        const ny = cy + dy;
-        if (nx >= 0 && nx < w && ny >= 0 && ny < h && grid[ny][nx] === 0) {
-          const tentativeG = gScore.get(`${cx},${cy}`)! + 1;
-          const neighborKey = `${nx},${ny}`;
-          if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
-            cameFrom.set(neighborKey, [cx, cy]);
-            gScore.set(neighborKey, tentativeG);
-            const f = tentativeG + Math.abs(nx - goal[0]) + Math.abs(ny - goal[1]);
-            openSet.push({ f, x: nx, y: ny });
+    while (head < tail && parent[goalId] === -1) {
+      const current = queue[head++];
+      const x = current % width;
+      const y = Math.floor(current / width);
+      const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+      for (const [nx, ny] of neighbors) {
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height && grid[ny][nx] === 0) {
+          const next = ny * width + nx;
+          if (parent[next] === -1) {
+            parent[next] = current;
+            queue[tail++] = next;
           }
         }
       }
     }
-    return [start];
+
+    if (parent[goalId] === -1) return [start];
+    const path: [number, number][] = [];
+    for (let current = goalId; current !== startId; current = parent[current]) {
+      path.push([current % width, Math.floor(current / width)]);
+    }
+    path.push(start);
+    return path.reverse();
   }
 }
+
