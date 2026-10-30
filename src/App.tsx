@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { generateDungeon, DungeonMaze, getDynamicLevelConfig, DynamicLevelConfig } from './utils/mazeGenerator';
+import { generateDungeon, DungeonMaze, getDynamicLevelConfig, DynamicLevelConfig, GRID_WIDTH, GRID_HEIGHT } from './utils/mazeGenerator';
 import { PlayerTopDown, EnemyTopDown } from './utils/entities';
 import { App as CapacitorApp } from '@capacitor/app';
 
@@ -74,7 +74,7 @@ export default function App() {
     dashCooldown: number;
     gameTime: number;
   }>({
-    dungeon: generateDungeon(21, 21, 3),
+    dungeon: generateDungeon(GRID_WIDTH, GRID_HEIGHT, 3),
     player: new PlayerTopDown(1.5, 1.5),
     enemy: new EnemyTopDown(18.5, 18.5),
     joystick: { x: 0, y: 0, active: false },
@@ -492,7 +492,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. اختيار المرحلة المتجددة */}
+      {/* 2. اختيار المرحلة */}
       {gameState === 'LEVEL_SELECT' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#080a0f]/95 text-white p-6 z-20">
           <h2 className="text-2xl font-bold text-cyan-400 mb-6">
@@ -524,7 +524,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. شاشة الفوز والمرحلة التالية */}
+      {/* 3. شاشة الفوز */}
       {gameState === 'VICTORY' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-6 z-20">
           <h2 className="text-3xl font-black mb-4 text-emerald-400">
