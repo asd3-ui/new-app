@@ -1,0 +1,12 @@
+{
+  "appId": "com.dungeon.raycast3d",
+  "appName": "Dungeon Raycast 3D",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#05050a"
+  }
+}
