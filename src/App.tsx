@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10349)
-Total output lines: 945
-
 import React, { useEffect, useRef, useState } from 'react';
 import { generateDungeon, DungeonMaze, getDynamicLevelConfig, DynamicLevelConfig, GRID_WIDTH, GRID_HEIGHT } from './utils/mazeGenerator';
 import { PlayerTopDown, EnemyTopDown } from './utils/entities';
@@ -545,7 +542,39 @@ export default function App() {
           }
 
           if (g.player.keys_collected >= g.player.total_keys) {
-            const [ex, ey] = g.dungeon.ex…349 tokens truncated…         }
+            const [ex, ey] = g.dungeon.exit_pos;
+            if (Math.hypot(g.player.x - ex, g.player.y - ey) < 0.85) {
+              g.player.score += 2000 + Math.max(0, Math.floor(300 - g.gameTime) * 10);
+              if (g.player.score > highScore) {
+                setHighScore(g.player.score);
+                try { localStorage.setItem('dungeon_high_score', g.player.score.toString()); } catch {}
+              }
+              triggerVibration([100, 50, 100]);
+              audio.playVictory();
+              setCoins(previous => {
+                const total = previous + 100 + g.player.keys_collected * 15;
+                localStorage.setItem('dungeon_coins', String(total));
+                return total;
+              });
+              setUnlockedLevel(previous => {
+                const next = Math.max(previous, currentLevelId + 1);
+                localStorage.setItem('dungeon_unlocked', String(next));
+                return next;
+              });
+              setGameState('VICTORY');
+            }
+          }
+
+          const caught = g.enemy.update(g.player.x, g.player.y, g.dungeon.grid, dt);
+          if (caught) {
+            g.player.health -= 60 * dt;
+            triggerVibration(30);
+            if (g.player.health <= 0) {
+              audio.playBeep(180, 0.35);
+              triggerVibration([200, 100, 200]);
+              setGameState('GAMEOVER');
+            }
+          }
 
           if (frameCount % 10 === 0) {
             setHealth(Math.max(0, Math.floor(g.player.health)));
@@ -912,5 +941,4 @@ export default function App() {
     </div>
   );
 }
-
 
