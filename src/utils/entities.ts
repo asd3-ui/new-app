@@ -80,16 +80,10 @@ export class EnemyTopDown {
   recalc_timer: number = 0;
   distance_to_player: number = 999;
 
-  constructor(x: number, y: number, difficulty: string = "NORMAL") {
+  constructor(x: number, y: number, speedVal: number = 2.2) {
     this.x = x;
     this.y = y;
-    if (difficulty === "EASY") {
-      this.speed = 1.65;
-      this.recalc_interval = 48;
-    } else if (difficulty === "HARD") {
-      this.speed = 2.75;
-      this.recalc_interval = 16;
-    }
+    this.speed = speedVal;
   }
 
   update(player_x: number, player_y: number, maze_grid: number[][], dt: number): boolean {
