@@ -23,6 +23,7 @@ const translations = {
         victoryTitle: "مبروك الفوز الأسطوري!",
         victoryText: "لقد أكملت جميع المراحل والبيئات بنجاح!",
         restartBtn: "إعادة المحاولة",
+        exitConfirm: "هل تريد حقاً الخروج من اللعبة؟",
         envNames: ["زنزانة حجرية", "كهف جليدي", "حصن الحمم", "سرداب الأشباح"]
     },
     en: {
@@ -38,6 +39,7 @@ const translations = {
         victoryTitle: "Epic Victory!",
         victoryText: "You successfully completed all stages and environments!",
         restartBtn: "Try Again",
+        exitConfirm: "Do you really want to exit the game?",
         envNames: ["Stone Dungeon", "Ice Cave", "Lava Fortress", "Ghost Crypt"]
     }
 };
@@ -61,7 +63,29 @@ const environments = [
     { wall: [90, 40, 130],   floor: [22, 12, 32],  ceiling: [10, 5, 15] }     // مستوى 4: سرداب الأشباح
 ];
 
-// تحديث النصوص بناءً على اللغة المتاحة
+// دالة العودة للقائمة الرئيسية
+function returnToMenu() {
+    gameState = 'MENU';
+    document.getElementById('main-menu').classList.remove('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('touch-controls').classList.add('hidden');
+    document.getElementById('modal-screen').classList.add('hidden');
+}
+
+// التعامل مع زر الرجوع في الهاتف (Android Back Button)
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('backButton', () => {
+        if (gameState === 'PLAYING' || gameState === 'GAMEOVER' || gameState === 'VICTORY') {
+            returnToMenu();
+        } else {
+            // إذا كان في القائمة الرئيسية، اسأله قبل الخروج النهائي
+            if (confirm(translations[currentLang].exitConfirm)) {
+                window.Capacitor.Plugins.App.exitApp();
+            }
+        }
+    });
+}
+
 function updateUIText() {
     const t = translations[currentLang];
     document.getElementById('menu-title').innerText = t.title;
@@ -151,7 +175,6 @@ function initLevel() {
     player.x = 1.5;
     player.y = 1.5;
     player.keys = 0;
-    // زيادة عدد وسرعة الأعداء تدريجياً مع تقدم المستويات
     enemies = [
         { x: 12.5, y: 12.5, speed: 1.2 + currentLevel * 0.2 },
         { x: 17.5, y: 5.5, speed: 1.4 + currentLevel * 0.2 }
@@ -259,7 +282,6 @@ function gameLoop(time) {
         }
     }
 
-    // التحقق من اجتياز المستوى والانتقال للبيئة التالية
     if(Math.hypot(player.x - exitPos.x, player.y - exitPos.y) < 0.5) {
         if(currentLevel < maxLevels) {
             currentLevel++;
@@ -274,7 +296,6 @@ function gameLoop(time) {
         }
     }
 
-    // تحديث حركة الأعداء
     for(let en of enemies) {
         let dx = player.x - en.x, dy = player.y - en.y;
         let dist = Math.hypot(dx, dy);
@@ -294,7 +315,6 @@ function gameLoop(time) {
         }
     }
 
-    // تحديث الواجهة
     document.getElementById('healthText').innerText = Math.max(0, Math.floor(player.health));
     document.getElementById('levelText').innerText = currentLevel;
     document.getElementById('keysText').innerText = player.keys;
@@ -305,11 +325,9 @@ function gameLoop(time) {
     requestAnimationFrame(gameLoop);
 }
 
-// محرك العرض والرسوميات (Raycasting)
 function render() {
     let env = environments[(currentLevel - 1) % environments.length];
 
-    // رسم السقف والأرضية بناءً على البيئة الحالية
     ctx.fillStyle = `rgb(${env.ceiling.join(',')})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
     ctx.fillStyle = `rgb(${env.floor.join(',')})`;
@@ -347,14 +365,13 @@ function render() {
         let b = env.wall[2] * shade;
 
         if(isExit) {
-            r = 0; g = 220 * shade; b = 100 * shade; // مخرج مضيء باللون الأخضر المميز
+            r = 0; g = 220 * shade; b = 100 * shade;
         }
 
         ctx.fillStyle = `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
         ctx.fillRect(i * columnWidth, (canvas.height - wallHeight) / 2, columnWidth + 1, wallHeight);
     }
 
-    // خريطة مصغرة احترافية (Minimap)
     let mapScale = 6;
     let mapX = 20, mapY = 20;
     ctx.fillStyle = "rgba(10, 10, 20, 0.75)";
@@ -368,12 +385,10 @@ function render() {
             }
         }
     }
-    // موقع اللاعب على الخريطة
     ctx.fillStyle = "#ff0055";
     ctx.beginPath();
     ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, 3.5, 0, Math.PI * 2);
     ctx.fill();
 }
 
-// تهيئة النصوص الافتراضية عند التحميل
 updateUIText();
