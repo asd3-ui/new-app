@@ -1,3 +1,6 @@
+export const GRID_WIDTH = 21;
+export const GRID_HEIGHT = 21;
+
 export interface DynamicLevelTheme {
   bg: string;
   floor: string;
@@ -17,9 +20,8 @@ export interface DynamicLevelConfig {
   keysCount: number;
 }
 
-// مولد الألوان والبيئات العشوائية المتناسقة إجرائياً
 function generateProceduralTheme(levelId: number): DynamicLevelTheme {
-  const hue = (levelId * 137.5) % 360; // توزيع زوايا الألوان بشكل جمالي متناسق
+  const hue = (levelId * 137.5) % 360;
   
   return {
     bg: `hsl(${hue}, 40%, 4%)`,
@@ -30,11 +32,9 @@ function generateProceduralTheme(levelId: number): DynamicLevelTheme {
   };
 }
 
-// دالة توليد خصائص المرحلة المتجددة تلقائياً عبر AI/Logic
 export function getDynamicLevelConfig(levelId: number): DynamicLevelConfig {
-  // تكبير المتاهة تدريجياً مع تقدم المراحل حتى حد أقصى مناسب للشاشات
   const baseSize = 19 + (Math.floor((levelId - 1) / 2) * 2);
-  const size = Math.min(31, baseSize); // أبعاد فردية لضمان سلامة خوارزمية المتاهات
+  const size = Math.min(31, baseSize);
 
   const keysCount = Math.min(7, 3 + Math.floor((levelId - 1) / 2));
   const enemySpeed = Number((1.8 + Math.min(levelId * 0.25, 2.2)).toFixed(2));
@@ -60,7 +60,7 @@ export class DungeonMaze {
   exit_pos: [number, number] = [18.5, 1.5];
   key_positions: [number, number][] = [];
 
-  constructor(width: number = 21, height: number = 21, keysCount: number = 3) {
+  constructor(width: number = GRID_WIDTH, height: number = GRID_HEIGHT, keysCount: number = 3) {
     this.width = width % 2 === 0 ? width + 1 : width;
     this.height = height % 2 === 0 ? height + 1 : height;
     this.grid = Array.from({ length: this.height }, () => Array(this.width).fill(1));
@@ -80,7 +80,6 @@ export class DungeonMaze {
       [2, 0],
     ];
 
-    // خوارزمية النحت العشوائي الإجرائي
     while (stack.length > 0) {
       const [cx, cy] = stack[stack.length - 1];
       const unvisited: [number, number, number, number][] = [];
@@ -105,7 +104,6 @@ export class DungeonMaze {
       }
     }
 
-    // إضافة مسارات وحلقات فرعية عشوائية للهروب من الوحش
     for (let y = 2; y < this.height - 2; y++) {
       for (let x = 2; x < this.width - 2; x++) {
         if (this.grid[y][x] === 1) {
@@ -118,7 +116,6 @@ export class DungeonMaze {
       }
     }
 
-    // نحت غرفة مركزية بأبعاد متناسقة
     const midY = Math.floor(this.height / 2);
     const midX = Math.floor(this.width / 2);
     for (let cy = midY - 1; cy <= midY + 1; cy++) {
@@ -129,14 +126,13 @@ export class DungeonMaze {
       }
     }
 
-    // تأكيد الحدود الصلبة
     for (let x = 0; x < this.width; x++) {
       this.grid[0][x] = 1;
       this.grid[this.height - 1][x] = 1;
     }
     for (let y = 0; y < this.height; y++) {
       this.grid[y][0] = 1;
-      this.grid[this.width - 1] = 1;
+      this.grid[y][this.width - 1] = 1;
     }
 
     this._assignEntities(keysCount);
@@ -152,7 +148,6 @@ export class DungeonMaze {
       }
     }
 
-    // اختيار مواقع عشوائية متباعدة للكائنات
     open_tiles.sort(() => Math.random() - 0.5);
 
     this.player_spawn = open_tiles[0] || [1.5, 1.5];
@@ -164,6 +159,6 @@ export class DungeonMaze {
   }
 }
 
-export function generateDungeon(width: number = 21, height: number = 21, keysCount: number = 3): DungeonMaze {
+export function generateDungeon(width: number = GRID_WIDTH, height: number = GRID_HEIGHT, keysCount: number = 3): DungeonMaze {
   return new DungeonMaze(width, height, keysCount);
 }
